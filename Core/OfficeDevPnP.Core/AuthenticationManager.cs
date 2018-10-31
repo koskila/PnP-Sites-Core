@@ -249,7 +249,18 @@ namespace OfficeDevPnP.Core
                                         Math.Min(lease.TotalSeconds - TimeSpan.FromMinutes(5).TotalSeconds,
                                                  TimeSpan.FromHours(1).TotalSeconds));
                                 Thread.Sleep(lease);
-                                appOnlyAccessToken = null;
+
+                                if (String.IsNullOrEmpty(response.RefreshToken))
+                                {
+                                    Log.Warning(Constants.LOGGING_SOURCE, "Lease expires in 5 minutes (at {0}), no Refresh Token supplied - setting Access Token to null. Please recreate the ClientContext!", response.ExpiresOn);
+                                    appOnlyAccessToken = null;
+                                }
+                                else
+                                {
+                                    Log.Debug(Constants.LOGGING_SOURCE, "Lease expires in 5 minutes (at {0}), trying to renew using the Refresh Token...", response.ExpiresOn);
+                                    appOnlyAccessToken = RefreshAccessToken(response.RefreshToken); // this might throw, but we'll log that and just set Access Token to null then -> context will expire like normal
+                                }
+
                             }
                             catch (Exception ex)
                             {
@@ -261,6 +272,16 @@ namespace OfficeDevPnP.Core
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Initial implementation for refreshing the Access Token
+        /// </summary>
+        /// <param name="refreshToken"></param>
+        /// <returns>New Access Token</returns>
+        private string RefreshAccessToken(string refreshToken)
+        {
+            return Utilities.TokenHelper.GetAccessToken(refreshToken, SHAREPOINT_PRINCIPAL, Utilities.TokenHelper.AcsHostUrl, Utilities.TokenHelper.Realm).AccessToken;
         }
 
         /// <summary>
