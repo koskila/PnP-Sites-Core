@@ -10,6 +10,7 @@ using OfficeDevPnP.Core.Framework.Provisioning.ObjectHandlers.TokenDefinitions;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using OfficeDevPnP.Core.Framework.Provisioning.ObjectHandlers.Extensions;
+using OfficeDevPnP.Core.Framework.Provisioning.ObjectHandlers.Utilities;
 
 namespace OfficeDevPnP.Core.Framework.Provisioning.ObjectHandlers
 {
@@ -405,6 +406,18 @@ namespace OfficeDevPnP.Core.Framework.Provisioning.ObjectHandlers
                                             Order = control.Order
                                         };
 
+                                        if (!String.IsNullOrEmpty(control.JsonControlData))
+                                        {
+                                            var json = JsonConvert.DeserializeObject<JObject>(control.JsonControlData);
+                                            if (json["instanceId"] != null && json["instanceId"].Type != JTokenType.Null)
+                                            {
+                                                if (Guid.TryParse(json["instanceId"].Value<string>(), out Guid instanceId))
+                                                {
+                                                    myWebPart.instanceId = instanceId;
+                                                }
+                                            }
+                                        }
+
                                         // Reduce column number by 1 due 0 start indexing
                                         page.AddControl(myWebPart, page.Sections[sectionCount].Columns[control.Column - 1], control.Order);
 
@@ -461,6 +474,15 @@ namespace OfficeDevPnP.Core.Framework.Provisioning.ObjectHandlers
 
                     // Persist the page
                     page.Save(pageName);
+
+                    if(clientSidePage.FieldValues != null && clientSidePage.FieldValues.Any())
+                    {
+                        List<FieldUpdateValue> fieldValues = clientSidePage.FieldValues.Select(s => new FieldUpdateValue(parser.ParseString(s.Key), parser.ParseString(s.Value))).ToList();
+                        Microsoft.SharePoint.Client.FieldCollection fields = page.PageListItem.ParentList.Fields;
+                        web.Context.Load(fields, fs => fs.Include(f => f.InternalName, f => f.FieldTypeKind, f => f.TypeAsString, f => f.ReadOnlyField, f => f.Title));
+                        web.Context.ExecuteQueryRetry();
+                        ListItemUtilities.UpdateListItem(web, page.PageListItem, fields, fieldValues);
+                    }
 
                     if (page.LayoutType != Pages.ClientSidePageLayoutType.SingleWebPartAppPage)
                     {
